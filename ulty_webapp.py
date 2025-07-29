@@ -1,74 +1,166 @@
-
 import streamlit as st
-import math
 import yfinance as yf
 import requests
+from streamlit_autorefresh import st_autorefresh
+import json
 
-st.set_page_config(page_title="ULTY Dividend Calculator", page_icon="💰")
-
-st.title("💸 Yieldmax ULTY Dividend Calculator")
-st.caption("แบบเรียลไทม์ พร้อมคำนวณจากราคาหุ้นและค่าเงินล่าสุด")
-
-# ดึงราคาหุ้น
-def get_ulty_price():
+def load_latest_dividend():
     try:
-        ulty = yf.Ticker("ULTY")
-        return ulty.info["regularMarketPrice"]
+        with open("latest_dividend.json", "r") as f:
+            return json.load(f).get("dividend", 0.0)
     except:
-        return None
+        return 0.0
 
-# ดึงอัตราแลกเปลี่ยน USD → THB
-def get_usd_to_thb():
+weekly_dividend_usd = load_latest_dividend()
+
+# ⏱ Refresh every 5 minutes
+st_autorefresh(interval=5 * 60 * 1000, key="datarefresh")
+
+# 📊 Constants
+ULTY_TICKER = "ULTY"
+DIVIDEND_PER_SHARE_WEEKLY = 0.104  # USD
+
+# 📈 Get real-time ULTI stock price
+def get_stock_price():
+    ticker = yf.Ticker(ULTY_TICKER)
+    hist = ticker.history(period="1d")
+    if not hist.empty:
+        return round(hist["Close"].iloc[-1], 2)
+    return None
+
+# 💱 Get real-time USD to THB exchange rate via Frankfurter
+def get_exchange_rate():
     try:
-        res = requests.get("https://open.er-api.com/v6/latest/USD")
+        res = requests.get("https://api.frankfurter.app/latest?from=USD&to=THB")
         data = res.json()
-        return data["rates"]["THB"]
+        return round(data["rates"]["THB"], 2)
     except:
         return None
 
-ulty_price = get_ulty_price()
-usd_to_thb = get_usd_to_thb()
-dividend_per_share = 0.0875  # ปันผลรายสัปดาห์ต่อหุ้น (USD)
+# 💰 Calculate dividend based on invested amount
+def calculate_weekly_dividend(amount_thb, stock_price_usd, exchange_rate):
+    usd = amount_thb / exchange_rate
+    shares = usd / stock_price_usd
+    dividend_usd = shares * DIVIDEND_PER_SHARE_WEEKLY
+    return round(dividend_usd * exchange_rate, 2)
 
-if ulty_price and usd_to_thb:
-    st.success(f"📈 ราคาหุ้น ULTY ปัจจุบัน: {ulty_price:.2f} USD\n💱 อัตราแลกเปลี่ยน: {usd_to_thb:.2f} THB/USD")
-else:
-    st.warning("⚠️ ไม่สามารถดึงข้อมูลเรียลไทม์ได้")
-    ulty_price = st.number_input("กรุณาใส่ราคาหุ้น ULTY (USD):", min_value=1.0, value=6.5)
-    usd_to_thb = st.number_input("กรุณาใส่อัตราแลกเปลี่ยน USD → THB:", min_value=25.0, value=36.0)
+# 🧮 Calculate required investment to get target weekly dividend
+def calculate_required_investment(target_weekly_dividend_thb, stock_price_usd, exchange_rate):
+    shares_needed = target_weekly_dividend_thb / (DIVIDEND_PER_SHARE_WEEKLY * exchange_rate)
+    total_usd = shares_needed * stock_price_usd
+    total_thb = total_usd * exchange_rate
+    return round(shares_needed), round(total_thb, 2)
 
-mode = st.radio("เลือกโหมดคำนวณ", ["🎯 อยากได้ปันผลเท่าไหร่", "💼 มีเงินเท่านี้ ลงทุนได้กี่หุ้น"])
+# ✨ Parse input with comma
+def parse_comma_input(text, default=0.0):
+    try:
+        return float(text.replace(",", ""))
+    except:
+        return default
 
-if mode == "🎯 อยากได้ปันผลเท่าไหร่":
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        amount = st.number_input("ปันผลที่ต้องการต่อสัปดาห์", min_value=0.0, value=5000.0)
-    with col2:
-        currency = st.selectbox("สกุลเงิน", ["THB", "USD"])
+# 🌐 Load data
+stock_price = get_stock_price()
+exchange_rate = get_exchange_rate()
 
-    if currency == "THB":
-        amount_usd = amount / usd_to_thb
+# 🖥 UI
+# 🎯 LOGO + TITLE
+col_logo, col_title = st.columns([1, 8])
+with col_logo:
+    st.image("yieldmax_logo.png", width=80)
+with col_title:
+    st.title(" Yieldmax ULTY Calculator (Real-time)")
+st.markdown("อัปเดตราคาหุ้น อัตราแลกเปลี่ยน และปันผลรายสัปดาห์ พร้อมคำนวณเงินลงทุนแบบเรียลไทม์")
+
+col1, col2, col3 = st.columns(3)
+col1.metric("📉 ราคาหุ้น ULTY", f"{stock_price} USD" if stock_price else "-")
+col2.metric("💱 อัตราแลกเปลี่ยน", f"{exchange_rate} THB/USD" if exchange_rate else "-")
+col3.metric("💰 ปันผลล่าสุด/สัปดาห์", f"{DIVIDEND_PER_SHARE_WEEKLY} USD")
+
+st.markdown("---")
+
+mode = st.radio("เลือกโหมดคำนวณ", ["📍 อยากได้ปันผลเท่าไหร่", "💼 คำนวณจากต้นทุน", "🔄 จำลองจุดคุ้มทุนแบบ Reinvest"], horizontal=True)
+
+if mode == "📍 อยากได้ปันผลเท่าไหร่":
+    st.header("📌 คำนวณจำนวนเงินที่ต้องลงทุน")
+    currency = st.selectbox("สกุลเงิน", ["THB", "USD"], index=0)
+
+    target_div_input = st.text_input("ปันผลที่ต้องการต่อสัปดาห์", value="5,000.00")
+    target_weekly_div = parse_comma_input(target_div_input, default=5000.0)
+
+    if stock_price and exchange_rate:
+        shares_needed, total_investment = calculate_required_investment(target_weekly_div, stock_price, exchange_rate)
+        monthly = target_weekly_div * 4
+        st.subheader("📉 ผลลัพธ์")
+        st.markdown(f"- จำนวนหุ้นที่ต้องซื้อ: **{shares_needed:,} หุ้น**")
+        st.markdown(f"- เงินลงทุนรวม: **{total_investment:,.2f} บาท**")
+        st.markdown(f"- คาดว่าจะได้รับปันผลต่อเดือน: **{monthly:,.2f} บาท**")
     else:
-        amount_usd = amount
+        st.error("ไม่สามารถดึงข้อมูลราคา/อัตราแลกเปลี่ยนได้ กรุณาตรวจสอบการเชื่อมต่อ")
 
-    shares_needed = math.ceil(amount_usd / dividend_per_share)
-    total_cost_usd = shares_needed * ulty_price
-    total_cost_thb = total_cost_usd * usd_to_thb
-    monthly_dividend_thb = shares_needed * dividend_per_share * 4 * usd_to_thb
+elif mode == "💼 คำนวณจากต้นทุน":
+    st.header("📌 คำนวณจำนวนปันผลที่ได้รับ")
 
-    st.subheader("📊 ผลลัพธ์")
-    st.markdown(f"- จำนวนหุ้นที่ต้องซื้อ: **{shares_needed:,} หุ้น**")
-    st.markdown(f"- เงินลงทุนรวม: **{total_cost_thb:,.2f} บาท**")
-    st.markdown(f"- คาดว่าจะได้ปันผลต่อเดือน: **{monthly_dividend_thb:,.2f} บาท**")
+    investment_input = st.text_input("จำนวนเงินที่ลงทุน (THB)", value="1,000.00")
+    investment = parse_comma_input(investment_input, default=1000.0)
 
-elif mode == "💼 มีเงินเท่านี้ ลงทุนได้กี่หุ้น":
-    capital_thb = st.number_input("เงินต้นทุนที่มี (บาท)", min_value=0.0, value=100000.0)
-    capital_usd = capital_thb / usd_to_thb
-    shares = math.floor(capital_usd / ulty_price)
-    actual_cost_thb = shares * ulty_price * usd_to_thb
-    monthly_dividend = shares * dividend_per_share * 4 * usd_to_thb
+    if stock_price and exchange_rate:
+        weekly = calculate_weekly_dividend(investment, stock_price, exchange_rate)
+        tax_amount = weekly * 0.15  # ✨ ภาษี 15%
+        weekly_after_tax = weekly * 0.85
+        monthly = weekly_after_tax * 4
+        yearly = weekly_after_tax * 52
 
-    st.subheader("📊 ผลลัพธ์")
-    st.markdown(f"- ซื้อได้: **{shares:,} หุ้น**")
-    st.markdown(f"- ปันผลต่อเดือนโดยประมาณ: **{monthly_dividend:,.2f} บาท**")
-    st.markdown(f"- ใช้ทุนจริงประมาณ: **{actual_cost_thb:,.2f} บาท**")
+        break_even_weeks = investment / weekly_after_tax if weekly_after_tax > 0 else 0
+        break_even_months = break_even_weeks / 4.33
+
+        st.success(f"✅ ปันผลรายสัปดาห์ (หลังหักภาษี 15%) ≈ {weekly_after_tax:,.2f} บาท")
+        st.info(f"📅 ปันผลรายเดือน ≈ {monthly:,.2f} บาท")
+        st.warning(f"📆 ปันผลรายปี ≈ {yearly:,.2f} บาท")
+        st.error(f"🔻 จำนวนเงินที่ถูกหักภาษี (บาท): {tax_amount:,.2f}")
+        st.markdown("---")
+        st.markdown("📌 **จุดคุ้มทุน (Break-even Point)**")
+        st.markdown(f"⏳ คืนทุนภายในประมาณ **{break_even_weeks:,.1f} สัปดาห์** หรือ **{break_even_months:,.1f} เดือน**")
+    else:
+        st.error("ไม่สามารถดึงข้อมูลราคา/อัตราแลกเปลี่ยนได้ กรุณาตรวจสอบการเชื่อมต่อ")
+
+elif mode == "🔄 จำลองจุดคุ้มทุนแบบ Reinvest":
+    st.header("🔁 จำลองการคืนทุนโดย Reinvest ปันผลทุกสัปดาห์")
+
+    st.markdown("### 📥 กรอกจำนวนเงินลงทุน (บาท)")
+    investment_input = st.text_input("💵 เงินลงทุนเริ่มต้น", value="100,000.00")
+    investment = parse_comma_input(investment_input, default=100000.0)
+
+    reinvest_stock_price = 6.40
+    reinvest_dividend_usd = 0.0875
+
+    if exchange_rate:
+        reinvest_usd_thb = exchange_rate
+
+        usd_investment = investment / reinvest_usd_thb
+        shares = usd_investment / reinvest_stock_price
+
+        total_received_thb = 0
+        weeks = 0
+
+        while total_received_thb < investment:
+            dividend_usd = shares * reinvest_dividend_usd
+            dividend_thb = dividend_usd * reinvest_usd_thb * 0.85
+            total_received_thb += dividend_thb
+
+            reinvested_shares = dividend_thb / reinvest_usd_thb / reinvest_stock_price
+            shares += reinvested_shares
+            weeks += 1
+
+            if weeks > 1000:
+                break
+
+        years = weeks // 52
+        months = (weeks % 52) // 4
+        days = (weeks % 52) % 4 * 7
+
+        st.success(f"📆 คาดว่าจะคืนทุนได้ใน {weeks:,} สัปดาห์ ≈ **{years} ปี {months} เดือน {days} วัน**")
+        st.info(f"📈 ปันผลรวมสะสม: **{total_received_thb:,.2f} บาท**")
+        st.caption(f"ใช้เรท USDTHB = {reinvest_usd_thb}, ราคาหุ้น = {reinvest_stock_price} USD, ปันผล/หุ้น = {reinvest_dividend_usd} USD")
+    else:
+        st.error("ไม่สามารถดึงอัตราแลกเปลี่ยน USDTHB แบบเรียลไทม์ได้")
+
