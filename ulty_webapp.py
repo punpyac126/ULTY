@@ -81,7 +81,7 @@ if mode == "\U0001F4CD อยากได้ปันผลเท่าไหร
         weekly_div = parse_comma_input(weekly_input, default=5000.0)
         monthly_div = weekly_div * 4
     else:
-        monthly_input = st.text_input("📆 ปันผลที่ต้องการต่อเดือน", value="20,000.00")
+        monthly_input = st.text_input("ปันผลที่ต้องการต่อเดือน", value="20,000.00")
         monthly_div = parse_comma_input(monthly_input, default=20000.0)
         weekly_div = monthly_div / 4
 
