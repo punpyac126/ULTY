@@ -13,14 +13,11 @@ def load_latest_dividend():
 
 weekly_dividend_usd = load_latest_dividend()
 
-# ⏱ Refresh every 5 minutes
 st_autorefresh(interval=5 * 60 * 1000, key="datarefresh")
 
-# 📊 Constants
 ULTY_TICKER = "ULTY"
-DIVIDEND_PER_SHARE_WEEKLY = 0.104  # USD
+DIVIDEND_PER_SHARE_WEEKLY = 0.104
 
-# 📈 Get real-time ULTI stock price
 def get_stock_price():
     ticker = yf.Ticker(ULTY_TICKER)
     hist = ticker.history(period="1d")
@@ -28,7 +25,6 @@ def get_stock_price():
         return round(hist["Close"].iloc[-1], 2)
     return None
 
-# 💱 Get real-time USD to THB exchange rate via Frankfurter
 def get_exchange_rate():
     try:
         res = requests.get("https://api.frankfurter.app/latest?from=USD&to=THB")
@@ -37,33 +33,27 @@ def get_exchange_rate():
     except:
         return None
 
-# 💰 Calculate dividend based on invested amount
 def calculate_weekly_dividend(amount_thb, stock_price_usd, exchange_rate):
     usd = amount_thb / exchange_rate
     shares = usd / stock_price_usd
     dividend_usd = shares * DIVIDEND_PER_SHARE_WEEKLY
     return round(dividend_usd * exchange_rate, 2)
 
-# 🧮 Calculate required investment to get target weekly dividend
 def calculate_required_investment(target_weekly_dividend_thb, stock_price_usd, exchange_rate):
     shares_needed = target_weekly_dividend_thb / (DIVIDEND_PER_SHARE_WEEKLY * exchange_rate)
     total_usd = shares_needed * stock_price_usd
     total_thb = total_usd * exchange_rate
     return round(shares_needed), round(total_thb, 2)
 
-# ✨ Parse input with comma
 def parse_comma_input(text, default=0.0):
     try:
         return float(text.replace(",", ""))
     except:
         return default
 
-# 🌐 Load data
 stock_price = get_stock_price()
 exchange_rate = get_exchange_rate()
 
-# 🖥 UI
-# 🎯 LOGO + TITLE
 col_logo, col_title = st.columns([1, 8])
 with col_logo:
     st.image("yieldmax_logo.png", width=80)
@@ -72,30 +62,38 @@ with col_title:
 st.markdown("อัปเดตราคาหุ้น อัตราแลกเปลี่ยน และปันผลรายสัปดาห์ พร้อมคำนวณเงินลงทุนแบบเรียลไทม์")
 
 col1, col2, col3 = st.columns(3)
-col1.metric("📉 ราคาหุ้น ULTY", f"{stock_price} USD" if stock_price else "-")
-col2.metric("💱 อัตราแลกเปลี่ยน", f"{exchange_rate} THB/USD" if exchange_rate else "-")
-col3.metric("💰 ปันผลล่าสุด/สัปดาห์", f"{DIVIDEND_PER_SHARE_WEEKLY} USD")
+col1.metric("\U0001F4C9 ราคาหุ้น ULTY", f"{stock_price} USD" if stock_price else "-")
+col2.metric("\U0001F4B1 อัตราแลกเปลี่ยน", f"{exchange_rate} THB/USD" if exchange_rate else "-")
+col3.metric("\U0001F4B0 ปันผลล่าสุด/สัปดาห์", f"{DIVIDEND_PER_SHARE_WEEKLY} USD")
 
 st.markdown("---")
 
-mode = st.radio("เลือกโหมดคำนวณ", ["📍 อยากได้ปันผลเท่าไหร่", "💼 คำนวณจากต้นทุน", "🔄 จำลองจุดคุ้มทุนแบบ Reinvest"], horizontal=True)
+mode = st.radio("เลือกโหมดคำนวณ", ["\U0001F4CD อยากได้ปันผลเท่าไหร่", "💼 คำนวณจากต้นทุน", "🔄 จำลองจุดคุ้มทุนแบบ Reinvest"], horizontal=True)
 
-if mode == "📍 อยากได้ปันผลเท่าไหร่":
-    st.header("📌 คำนวณจำนวนเงินที่ต้องลงทุน")
+if mode == "\U0001F4CD อยากได้ปันผลเท่าไหร่":
+    st.header("\U0001F4CC คำนวณจำนวนเงินที่ต้องลงทุน")
     currency = st.selectbox("สกุลเงิน", ["THB", "USD"], index=0)
 
-    target_div_input = st.text_input("ปันผลที่ต้องการต่อสัปดาห์", value="5,000.00")
-    target_weekly_div = parse_comma_input(target_div_input, default=5000.0)
+    div_mode = st.radio("เลือกรูปแบบการกรอกปันผลที่ต้องการ", ["\U0001F4B5 รายสัปดาห์", "📋 รายเดือน"], horizontal=True)
+
+    if div_mode == "\U0001F4B5 รายสัปดาห์":
+        weekly_input = st.text_input("\U0001F4B8 ปันผลที่ต้องการต่อสัปดาห์", value="5,000.00")
+        weekly_div = parse_comma_input(weekly_input, default=5000.0)
+        monthly_div = weekly_div * 4-
+    else:
+        monthly_input = st.text_input("\uD83D\uDCC6 ปันผลที่ต้องการต่อเดือน", value="20,000.00")
+        monthly_div = parse_comma_input(monthly_input, default=20000.0)
+        weekly_div = monthly_div / 4
 
     if stock_price and exchange_rate:
-        shares_needed, total_investment = calculate_required_investment(target_weekly_div, stock_price, exchange_rate)
-        monthly = target_weekly_div * 4
-        st.subheader("📉 ผลลัพธ์")
+        shares_needed, total_investment = calculate_required_investment(weekly_div, stock_price, exchange_rate)
+        st.subheader("\U0001F4C9 ผลลัพธ์")
         st.markdown(f"- จำนวนหุ้นที่ต้องซื้อ: **{shares_needed:,} หุ้น**")
         st.markdown(f"- เงินลงทุนรวม: **{total_investment:,.2f} บาท**")
-        st.markdown(f"- คาดว่าจะได้รับปันผลต่อเดือน: **{monthly:,.2f} บาท**")
+        st.markdown(f"- ปันผลต่อเดือน (แปลงจากรายสัปดาห์): **{weekly_div * 4:,.2f} บาท**")
     else:
         st.error("ไม่สามารถดึงข้อมูลราคา/อัตราแลกเปลี่ยนได้ กรุณาตรวจสอบการเชื่อมต่อ")
+
 
 elif mode == "💼 คำนวณจากต้นทุน":
     st.header("📌 คำนวณจำนวนปันผลที่ได้รับ")
