@@ -79,7 +79,7 @@ if mode == "\U0001F4CD อยากได้ปันผลเท่าไหร
     if div_mode == "\U0001F4B5 รายสัปดาห์":
         weekly_input = st.text_input("\U0001F4B8 ปันผลที่ต้องการต่อสัปดาห์", value="5,000.00")
         weekly_div = parse_comma_input(weekly_input, default=5000.0)
-        monthly_div = weekly_div * 4-
+        monthly_div = weekly_div * 4
     else:
         monthly_input = st.text_input("\uD83D\uDCC6 ปันผลที่ต้องการต่อเดือน", value="20,000.00")
         monthly_div = parse_comma_input(monthly_input, default=20000.0)
