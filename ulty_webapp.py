@@ -16,7 +16,7 @@ weekly_dividend_usd = load_latest_dividend()
 st_autorefresh(interval=5 * 60 * 1000, key="datarefresh")
 
 ULTY_TICKER = "ULTY"
-DIVIDEND_PER_SHARE_WEEKLY = 0.104
+DIVIDEND_PER_SHARE_WEEKLY = 0.1008
 
 def get_stock_price():
     ticker = yf.Ticker(ULTY_TICKER)
